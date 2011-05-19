@@ -9,9 +9,10 @@ sub dirname($)
     return ".";
 }
 
+my $want_quiet = (@ARGV && $ARGV[0] eq '-Q' && shift @ARGV);
 
 if (@ARGV < 1) {
-    print STDERR "Usage: $0 <section> [commandline...]\n";
+    print STDERR "Usage: $0 [-Q] <section> [commandline...]\n";
     print STDERR "  Copies stdin or command output to a new logfile in <section>.\n";
     exit 1;
 }
@@ -29,28 +30,41 @@ die("No such section '$homedir/data/$section'\n")
 my $date = strftime("%Y%m%d-%H%M%S", localtime()) . "." . int(rand(100000));
 my $tmpfile = "$homedir/data/$section/.tmp.$date";
 my $realfile = "$homedir/data/$section/$date";
-    
-open my $fh, ">$tmpfile" or die("$tmpfile: $!\n");
+
+open my $fh, ">$tmpfile" or die("Create $tmpfile: $!\n");
+
+sub print_log($) {
+    print $fh @_
+      or die "Writing $tmpfile: $!";
+}
+
 my $host = `hostname`;
 $host =~ s/\s+//g;
-print $fh "Starting: $date on host=$host\n";
+
+print_log("Starting: $date on host=$host\n");
+print_log("-Q: no news is good news\n") if $want_quiet;
 if (@ARGV) {
-    print $fh "Command: " . join(' ', @ARGV) . "\n";
+    print_log("Command: " . join(' ', @ARGV) . "\n");
 }
-print $fh "\n";
+print_log("\n");
 
 my $any = 0;
 my $ret = -1;
 if (@ARGV) {
     my $pid = open(my $infh, "-|");
-    if ($pid) {
+    if (!defined $pid) {
+	print_log("fork failed: $!\n");
+	$any++;
+    } elsif ($pid) {
 	# main process
 	while (<$infh>) {
 	    if (/^EXIT CODE: (\d+)/) {
 		$ret = $1;
+		$any--; # bodge: compensate for "\n" before "EXIT CODE"
+	    } else {
+		$any++;
 	    }
-	    print $fh $_;
-	    $any++;
+	    print_log($_);
 	}
 	close $infh;
     } else {
@@ -63,26 +77,30 @@ if (@ARGV) {
 	} else {
 	    $ret >>= 8;
 	}
-	print "\nEXIT CODE: $ret\n";
+	print "\nEXIT CODE: $ret\n"; # nb. matching $any-- above
 	exit($ret);
     }
 } else {
     while (<STDIN>) {
-	print $fh $_;
+	print_log($_);
 	$any++;
     }
 }
 
-print $fh "No messages.\n" unless $any;
+print_log("No messages.\n") unless $any;
 close $fh;
 
-# Assume zero-length output means success, else failure.
-# (same logic as cron uses)
-if (!$any || $ret==0) {
-    rename($tmpfile, $realfile . ".ok");
+my $ok;
+if ($want_quiet) {
+    # "silence is golden" semantic
+    $ok = (!$any && $ret == 0);
 } else {
-    rename($tmpfile, $realfile);
+    # Assume zero-length output means success, else failure.
+    # (same logic as cron uses)
+    $ok = (!$any || $ret==0);
 }
+rename($tmpfile, $realfile.($ok ? '.ok' : ''))
+  or die "Rename $tmpfile: $!";
 
 system("touch", "$homedir/data/$section/.stamp");
 
