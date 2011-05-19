@@ -16,6 +16,15 @@ chdir $homedir
 chdir 'data'
     or die("No data/ subdir!");
 
+if ($ENV{'GATEWAY_INTERFACE'}) {
+    # Called as CGI.  That's OK if we were POSTed.
+    if ($ENV{'REQUEST_METHOD'} ne 'POST') {
+	my $msg = "Expire may be called via CGI, but only with POST.\n";
+	print "Content-type: text/plain\nStatus: 403\n\n$msg";
+	die $msg;
+    }
+}
+
 # delete really old files
 foreach my $file (glob("*/*")) {
     if (-M $file > 14) {
@@ -59,4 +68,9 @@ foreach my $dir (glob("*")) {
 	printf $fh "Latest stamp is %.2f days old.\n", $newest_stamp;
 	printf $fh "Latest file is %.2f days old.\n", $newest;
     }
+}
+
+if ($ENV{'GATEWAY_INTERFACE'}) {
+    # Called as CGI.  That's OK if we were POSTed.
+    print "Content-type: text/plain\n\nExpiry ran OK.\n";
 }
