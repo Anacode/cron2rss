@@ -79,7 +79,10 @@ print "\n";
 my $fail_only = defined(param('q')) && param('q') eq "failed";
 my $ptitle = $fail_only ? "Cron FAIL" : "Cron";
 
-print qq{<rss version='2.0' xmlns:atom="http://www.w3.org/2005/Atom">
+print qq{<?xml version="1.0" encoding="UTF-8"?>
+<rss version='2.0'
+  xmlns:content="http://purl.org/rss/1.0/modules/content/"
+  xmlns:atom="http://www.w3.org/2005/Atom">
 	<channel>
 		<title>$ptitle</title>
 		<description>$ptitle</description>
@@ -107,7 +110,7 @@ sub rss_item($$$$)
 	  <pubDate>$date</pubDate>
 	  <link>$link</link>
 	  <guid isPermaLink='true'>$link</guid>
-	  <description>$description</description>
+	  <content:encoded><![CDATA[<pre style='border: thin black dotted; padding: 0.5ex'>$description</pre>]]></content:encoded>
 	</item>
     };
 }
