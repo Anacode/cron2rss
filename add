@@ -60,6 +60,7 @@ if (@ARGV) {
 	while (<$infh>) {
 	    if (/^EXIT CODE: (\d+)/) {
 		$ret = $1;
+		$any--; # bodge: compensate for "\n" before "EXIT CODE"
 	    } else {
 		$any++;
 	    }
@@ -76,7 +77,7 @@ if (@ARGV) {
 	} else {
 	    $ret >>= 8;
 	}
-	print "\nEXIT CODE: $ret\n";
+	print "\nEXIT CODE: $ret\n"; # nb. matching $any-- above
 	exit($ret);
     }
 } else {
