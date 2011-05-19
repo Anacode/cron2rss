@@ -41,7 +41,9 @@ sub print_log($) {
 my $host = `hostname`;
 $host =~ s/\s+//g;
 
-print_log("Starting: $date on host=$host\n");
+my $user = getpwuid($>);
+
+print_log("Starting: $date on host=$host user=$user\n");
 print_log("-Q: no news is good news\n") if $want_quiet;
 if (@ARGV) {
     print_log("Command: " . join(' ', @ARGV) . "\n");
