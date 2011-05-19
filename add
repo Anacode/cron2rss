@@ -9,6 +9,13 @@ sub dirname($)
     return ".";
 }
 
+sub neat_times() {
+    my ($user,$system,$cuser,$csystem) = times;
+    my $wall = time - $^T;
+    return sprintf("Times: wallclock=%ds user+sys=%.2fs sys=%.2fs\n",
+		   $wall, $cuser+$csystem, $csystem);
+}
+
 my $want_quiet = (@ARGV && $ARGV[0] eq '-Q' && shift @ARGV);
 
 if (@ARGV < 1) {
@@ -41,7 +48,9 @@ sub print_log($) {
 my $host = `hostname`;
 $host =~ s/\s+//g;
 
-print_log("Starting: $date on host=$host\n");
+my $user = getpwuid($>);
+
+print_log("Starting: $date on host=$host user=$user\n");
 print_log("-Q: no news is good news\n") if $want_quiet;
 if (@ARGV) {
     print_log("Command: " . join(' ', @ARGV) . "\n");
@@ -67,6 +76,7 @@ if (@ARGV) {
 	    print_log($_);
 	}
 	close $infh;
+	print_log(neat_times());
     } else {
 	# subprocess
 	open STDERR, ">&STDOUT";
