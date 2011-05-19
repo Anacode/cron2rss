@@ -9,9 +9,10 @@ sub dirname($)
     return ".";
 }
 
+my $want_quiet = (@ARGV && $ARGV[0] eq '-Q' && shift @ARGV);
 
 if (@ARGV < 1) {
-    print STDERR "Usage: $0 <section> [commandline...]\n";
+    print STDERR "Usage: $0 [-Q] <section> [commandline...]\n";
     print STDERR "  Copies stdin or command output to a new logfile in <section>.\n";
     exit 1;
 }
@@ -41,6 +42,7 @@ my $host = `hostname`;
 $host =~ s/\s+//g;
 
 print_log("Starting: $date on host=$host\n");
+print_log("-Q: no news is good news\n") if $want_quiet;
 if (@ARGV) {
     print_log("Command: " . join(' ', @ARGV) . "\n");
 }
@@ -58,8 +60,9 @@ if (@ARGV) {
 	while (<$infh>) {
 	    if (/^EXIT CODE: (\d+)/) {
 		$ret = $1;
+	    } else {
+		$any++;
 	    }
-	    $any++;
 	    print_log($_);
 	}
 	close $infh;
@@ -86,13 +89,17 @@ if (@ARGV) {
 print_log("No messages.\n") unless $any;
 close $fh;
 
-# Assume zero-length output means success, else failure.
-# (same logic as cron uses)
-if (!$any || $ret==0) {
-    rename($tmpfile, $realfile . ".ok");
+my $ok;
+if ($want_quiet) {
+    # "silence is golden" semantic
+    $ok = (!$any && $ret == 0);
 } else {
-    rename($tmpfile, $realfile);
+    # Assume zero-length output means success, else failure.
+    # (same logic as cron uses)
+    $ok = (!$any || $ret==0);
 }
+rename($tmpfile, $realfile.($ok ? '.ok' : ''))
+  or die "Rename $tmpfile: $!";
 
 system("touch", "$homedir/data/$section/.stamp");
 
