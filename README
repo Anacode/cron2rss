@@ -4,6 +4,7 @@ WTSI: Anacode team local webserver config
 
 Install to $HTTPD/cgi-bin/cron2rss/
   cd $HTTPD
+  ln -snvf ../cgi-bin/cron2rss/cron2rss.html htdocs/
 
   # index.cgi is hacked to expect this
   ln -snvf ../cgi-bin/cron2rss/data htdocs/cron2rss_data
