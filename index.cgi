@@ -70,6 +70,8 @@ sub shorten($$)
 my $url = url();
 my $relative = url(-relative=>1);
 $url =~ s{/$relative$}{};
+my $data_url = $url;
+$data_url =~ s{/cgi-bin/cron2rss/.*}{/cron2rss_data/};
 
 print "Content-Type: text/xml\n";
 print "\n";
@@ -81,7 +83,7 @@ print qq{<rss version='2.0' xmlns:atom="http://www.w3.org/2005/Atom">
 	<channel>
 		<title>$ptitle</title>
 		<description>$ptitle</description>
-		<link>$url</link>
+		<link>$data_url</link>
 		<atom:link href="$url/index.cgi" rel="self" type="application/rss+xml" />
 		<language>en-ca</language>
 		<generator>CGI</generator>
@@ -134,7 +136,7 @@ foreach my $file (sort { mtime($b) <=> mtime($a) } @wanted) {
     my $ok = -r $file && (-z $file || $file =~ /\.ok$/);
     my $title = sprintf("%s %s", $ok ? "ok" : "ERROR", $file);
     
-    print rss_item("$url/data/$file", mtime($file), $title, catfile($file));
+    print rss_item("$data_url/$file", mtime($file), $title, catfile($file));
 }
 
 print "</channel></rss>";

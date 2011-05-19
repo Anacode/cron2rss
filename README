@@ -1,4 +1,24 @@
 
+WTSI: Anacode team local webserver config
+=========================================
+
+Install to $HTTPD/cgi-bin/cron2rss/
+  cd $HTTPD
+
+  # index.cgi is hacked to expect this
+  ln -snvf ../cgi-bin/cron2rss/data htdocs/cron2rss_data
+
+  # this is probably pure paranoia
+  rm cgi-bin/cron2rss/.git/hooks/*.sample
+
+Assume that each machine running crons has a /var/tmp/$USER.cron2rss
+
+and call
+  $HTTPD/cgi-bin/cron2rss/data-from $HOST:/var/tmp/$USER.cron2rss
+
+periodically to fetch the data.
+
+
 INTRODUCTION
 ============
 
