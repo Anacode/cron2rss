@@ -29,28 +29,38 @@ die("No such section '$homedir/data/$section'\n")
 my $date = strftime("%Y%m%d-%H%M%S", localtime()) . "." . int(rand(100000));
 my $tmpfile = "$homedir/data/$section/.tmp.$date";
 my $realfile = "$homedir/data/$section/$date";
-    
-open my $fh, ">$tmpfile" or die("$tmpfile: $!\n");
+
+open my $fh, ">$tmpfile" or die("Create $tmpfile: $!\n");
+
+sub print_log($) {
+    print $fh @_
+      or die "Writing $tmpfile: $!";
+}
+
 my $host = `hostname`;
 $host =~ s/\s+//g;
-print $fh "Starting: $date on host=$host\n";
+
+print_log("Starting: $date on host=$host\n");
 if (@ARGV) {
-    print $fh "Command: " . join(' ', @ARGV) . "\n";
+    print_log("Command: " . join(' ', @ARGV) . "\n");
 }
-print $fh "\n";
+print_log("\n");
 
 my $any = 0;
 my $ret = -1;
 if (@ARGV) {
     my $pid = open(my $infh, "-|");
-    if ($pid) {
+    if (!defined $pid) {
+	print_log("fork failed: $!\n");
+	$any++;
+    } elsif ($pid) {
 	# main process
 	while (<$infh>) {
 	    if (/^EXIT CODE: (\d+)/) {
 		$ret = $1;
 	    }
-	    print $fh $_;
 	    $any++;
+	    print_log($_);
 	}
 	close $infh;
     } else {
@@ -68,12 +78,12 @@ if (@ARGV) {
     }
 } else {
     while (<STDIN>) {
-	print $fh $_;
+	print_log($_);
 	$any++;
     }
 }
 
-print $fh "No messages.\n" unless $any;
+print_log("No messages.\n") unless $any;
 close $fh;
 
 # Assume zero-length output means success, else failure.
