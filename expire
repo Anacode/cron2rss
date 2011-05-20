@@ -57,7 +57,7 @@ foreach my $dir (glob("*")) {
     }
     
     my $date = strftime("%Y%m%d-%H%M%S", localtime());
-    my $efile = "$dir/$date." . int(rand(100000));
+    my $efile = "$dir/$date." . int(rand(100000)).'.warn';
     
     if ($newest_stamp > 0.3 || $newest > 1.1) {
 	open my $fh, ">$efile" or die("$efile: $!\n");
