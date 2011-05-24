@@ -128,14 +128,16 @@ foreach my $dir (glob("*")) {
     }
 
     if (@WARN) {
-	my $date = u2stamp($^T);
-	my $efile = "$dir/$date." . int(rand(100000)).'.warn';
-
-	open my $fh, ">$efile" or die("$efile: $!\n");
 	my $host = `hostname`;
 	$host =~ s/\s+//g;
 	my $s = (@WARN == 1 ? '' : 'S');
-	print $fh join "\n", "WARNING$s (host=$host)\n", @WARN;
+	my $msg = join "\n", "WARNING$s (host=$host)\n", @WARN;
+
+	my $date = u2stamp($^T);
+	my $efile = "$dir/$date." . int(rand(100000)).'.warn';
+
+	open my $fh, ">$efile" or die("$efile: $!\n\nPending messages:\n$msg");
+	print $fh $msg;
     }
 }
 
