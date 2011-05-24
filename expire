@@ -36,9 +36,10 @@ foreach my $file (glob("*/*")) {
 foreach my $dir (glob("*")) {
     my $newest = 1000;
     my $newest_stamp = 1000;
-    
+
     my @files = glob("$dir/*");
-    
+    my %seen; # key = "date-time.random" part, value = filename
+
     # the .stamp file notes that the dir has been updated, even if there are
     # new new interesting entries
     if (-e "$dir/.stamp") {
@@ -48,15 +49,33 @@ foreach my $dir (glob("*")) {
         system("touch", "$dir/.stamp");
         system("touch", "$dir/00-Initial-Entry.ok");
 	$newest_stamp = $newest = 0;
-    }	
-    
+    }
+
     foreach my $file (glob("$dir/*")) {
 	my $n = -M $file;
+	$seen{$1} = $file if $file =~ m{/(\d+-\d+\.\d+)($|\.)};
 	$newest = $n if ($newest > $n);
 	$newest_stamp = $n if ($newest_stamp > $n);
     }
 
     my @WARN;
+    foreach my $file (glob("$dir/.tmp.*")) {
+	my ($dt, $rnd) =
+	  $file =~ m{/\.tmp\.(\d+-\d+)\.(\d+)($|\.)};
+	next unless $dt;
+
+	if ($seen{"$dt.$rnd"}) {
+	    # This .tmp.file has been renamed elsewhere, but we have
+	    # both copies because we fetched the .tmp.file while the
+	    # job was running.
+	    #
+	    # Delete the .tmp.file because it's stale.
+	    unlink($file) or warn "Cannot unlink($file): $!";
+	    warn "Race file cleaned: $file\n";
+	} # else it started recently - assume we have simply "not yet seen" the rename to a completion filename
+	# OR it started a long time ago, and may either be still running or crashed
+    }
+
     if ($newest_stamp > 0.3 || $newest > 1.1) {
 	push @WARN, sprintf("No recent entries in this directory!\n".
 			    "  Latest stamp is %.2f days old.\n".
