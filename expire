@@ -1,6 +1,7 @@
 #!/usr/bin/perl -w
 use strict;
 use POSIX qw(strftime);
+use Time::Local 'timelocal';
 
 sub dirname($)
 {
@@ -63,6 +64,7 @@ foreach my $dir (glob("*")) {
 	my ($dt, $rnd) =
 	  $file =~ m{/\.tmp\.(\d+-\d+)\.(\d+)($|\.)};
 	next unless $dt;
+	my $begin = stamp2u($dt);
 
 	if ($seen{"$dt.$rnd"}) {
 	    # This .tmp.file has been renamed elsewhere, but we have
@@ -70,10 +72,52 @@ foreach my $dir (glob("*")) {
 	    # job was running.
 	    #
 	    # Delete the .tmp.file because it's stale.
-	    unlink($file) or warn "Cannot unlink($file): $!";
+	    unlink($file) or push @WARN, "Cannot unlink($file): $!";
+
 	    warn "Race file cleaned: $file\n";
+	    # this makes expire noisy, which it previously was not;
+	    # mine runs under 'add' and immediately after data-from
+	    # so that may not matter..?
+
+	} elsif ($^T - $begin > 0.3 * 86400) {
+	    # Guess what happened to its job?
+	    #
+	    # Input data: start time & last modification time.
+	    #
+	    # States: we are the host where it ran XOR we are likely to be given another copy later
+	    #
+	    # Causes:
+	    #   job started and crashing (machine crash or 'add' failure)
+	    #   job running for a long time
+	    #   job completed nicely but data-{to,from} has not happened
+	    #
+	    # Possible actions:
+	    #   rename it, so we have state for next time?
+	    #      Then the 'add' process will be confused if local; that will generate cron mail.
+	    #      Or we will repeatedly fetch the latest .tmp.file and unlink it; if the remote has an old 'expire'.
+	    #      We may also end up with two files DDD-TTT.RND{.staletmp,.ok}
+	    #   hardlink it, so we have both?  Then we must expire one link later, when process finishes.
+	    #   touch an adjacent file to acknowledge the length/mtime; tidy it up later.  (idempotently? need a warning each)
+	    #      If same host: ack+warn after 0.3d, else after 1.1d; avoids fetch/expire races
+
+	    # Do something to prevent warning recurring per expire run.
+	    # Try renaming, see how it works out...
+	    my $new_name = $file;
+	    $new_name =~ s{/\.tmp\.}{/};
+	    $new_name .= ".staletmp";
+	    my ($dev,$ino,$mode,$nlink,$uid,$gid,$rdev,$size,
+		$atime,$mtime,$ctime,$blksize,$blocks) = stat($file);
+	    rename $file, $new_name or push @WARN, "Renaming $file => $new_name: $!\n";
+	    utime $^T, $^T, $new_name; # bump to the top of the RSS
+
+	    # Generate a warning
+	    push @WARN, sprintf("Stale or long-running job?\n".
+				"  %s renamed to %s\n".
+				"  atime=%s mtime=%s ctime=%s (now touched)\n",
+				$file, $new_name,
+				map { u2stamp($_) } ($atime, $mtime, $ctime));
+
 	} # else it started recently - assume we have simply "not yet seen" the rename to a completion filename
-	# OR it started a long time ago, and may either be still running or crashed
     }
 
     if ($newest_stamp > 0.3 || $newest > 1.1) {
@@ -104,4 +148,12 @@ if ($ENV{'GATEWAY_INTERFACE'}) {
 sub u2stamp {
     my $utime = shift;
     return strftime("%Y%m%d-%H%M%S", localtime($utime));
+}
+
+sub stamp2u {
+    my $dt = shift;
+    my ($Y,$M,$D, $h, $m, $s) =
+      $dt =~ m{^(\d{4})(\d{2})(\d{2})-(\d{2})(\d{2})(\d{2})$}
+	or die "Cannot parse datetime stamp '$dt'";
+    return timelocal($s,$m,$h, $D, $M-1, $Y-1900);
 }
