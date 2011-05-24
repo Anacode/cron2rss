@@ -28,7 +28,7 @@ if ($ENV{'GATEWAY_INTERFACE'}) {
 # delete really old files
 foreach my $file (glob("*/*")) {
     if (-M $file > 14) {
-	unlink($file);
+	unlink($file) or warn "Cannot unlink($file): $!";
     }
 }
 
@@ -55,22 +55,34 @@ foreach my $dir (glob("*")) {
 	$newest = $n if ($newest > $n);
 	$newest_stamp = $n if ($newest_stamp > $n);
     }
-    
-    my $date = strftime("%Y%m%d-%H%M%S", localtime());
-    my $efile = "$dir/$date." . int(rand(100000)).'.warn';
-    
+
+    my @WARN;
     if ($newest_stamp > 0.3 || $newest > 1.1) {
+	push @WARN, sprintf("No recent entries in this directory!\n".
+			    "  Latest stamp is %.2f days old.\n".
+			    "  Latest file is %.2f days old.\n",
+			    $newest_stamp, $newest);
+    }
+
+    if (@WARN) {
+	my $date = u2stamp($^T);
+	my $efile = "$dir/$date." . int(rand(100000)).'.warn';
+
 	open my $fh, ">$efile" or die("$efile: $!\n");
 	my $host = `hostname`;
 	$host =~ s/\s+//g;
-	print $fh "WARNING (host=$host): No recent entries in this directory!\n";
-	print $fh "\n";
-	printf $fh "Latest stamp is %.2f days old.\n", $newest_stamp;
-	printf $fh "Latest file is %.2f days old.\n", $newest;
+	my $s = (@WARN == 1 ? '' : 'S');
+	print $fh join "\n", "WARNING$s (host=$host)\n", @WARN;
     }
 }
 
 if ($ENV{'GATEWAY_INTERFACE'}) {
     # Called as CGI.  That's OK if we were POSTed.
     print "Content-type: text/plain\n\nExpiry ran OK.\n";
+}
+
+
+sub u2stamp {
+    my $utime = shift;
+    return strftime("%Y%m%d-%H%M%S", localtime($utime));
 }
