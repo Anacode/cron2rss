@@ -54,9 +54,22 @@ foreach my $dir (glob("*")) {
 
     foreach my $file (glob("$dir/*")) {
 	my $n = -M $file;
-	$seen{$1} = $file if $file =~ m{/(\d+-\d+\.\d+)($|\.)};
 	$newest = $n if ($newest > $n);
 	$newest_stamp = $n if ($newest_stamp > $n);
+
+	if ($file =~ m{/(\d+-\d+\.\d+)($|\.)}) {
+	    # Remember the date-time.rnd part
+	    my $dt = $1;
+	    if (defined $seen{$dt}) {
+		# Erk, two of them.  Remember the bigger one.
+		#
+		# Probably renamed by expire from .tmp.file to
+		# file.staletmp
+		$seen{$dt} = $file if -s $file > -s $seen{$dt};
+	    } else {
+		$seen{$dt} = $file;
+	    }
+	}
     }
 
     my @WARN;
@@ -66,18 +79,29 @@ foreach my $dir (glob("*")) {
 	next unless $dt;
 	my $begin = stamp2u($dt);
 
-	if ($seen{"$dt.$rnd"}) {
-	    # This .tmp.file has been renamed elsewhere, but we have
-	    # both copies because we fetched the .tmp.file while the
-	    # job was running.
-	    #
-	    # Delete the .tmp.file because it's stale.
-	    unlink($file) or push @WARN, "Cannot unlink($file): $!";
+	if (my $done_file = $seen{"$dt.$rnd"}) {
+	    # The rename of .tmp.file has been done elsewhere, but we
+	    # have both copies because we fetched the .tmp.file while
+	    # the job was running.
+	    if (-s $file > -s $done_file) {
+		# .tmp.file is longer, repeat the rename.  This is
+		# probably a .staletmp file.
+		if (rename($file, $done_file)) {
+		    push @WARN, "Repeated rename $file -> $done_file\n"
+		} else {
+		    push @WARN, "Cannot repeat rename $file -> $done_file: $!\n";
+		}
+		utime $^T, $^T, $done_file; # bump to the top of the RSS
 
-	    warn "Race file cleaned: $file\n";
-	    # this makes expire noisy, which it previously was not;
-	    # mine runs under 'add' and immediately after data-from
-	    # so that may not matter..?
+	    } else {
+		# Delete the .tmp.file because it's stale.
+		unlink($file) or push @WARN, "Cannot unlink($file): $!\n";
+
+		warn "Race file cleaned: $file\n";
+		# this makes expire noisy, which it previously was
+		# not; mine runs under 'add' and immediately after
+		# data-from so that may not matter..?
+	    }
 
 	} elsif ($^T - $begin > 0.3 * 86400) {
 	    # Guess what happened to its job?
