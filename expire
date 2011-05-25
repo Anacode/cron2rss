@@ -1,6 +1,7 @@
 #!/usr/bin/perl -w
 use strict;
 use POSIX qw(strftime);
+use Time::Local 'timelocal';
 
 sub dirname($)
 {
@@ -28,7 +29,7 @@ if ($ENV{'GATEWAY_INTERFACE'}) {
 # delete really old files
 foreach my $file (glob("*/*")) {
     if (-M $file > 14) {
-	unlink($file);
+	unlink($file) or warn "Cannot unlink($file): $!";
     }
 }
 
@@ -36,9 +37,10 @@ foreach my $file (glob("*/*")) {
 foreach my $dir (glob("*")) {
     my $newest = 1000;
     my $newest_stamp = 1000;
-    
+
     my @files = glob("$dir/*");
-    
+    my %seen; # key = "date-time.random" part, value = filename
+
     # the .stamp file notes that the dir has been updated, even if there are
     # new new interesting entries
     if (-e "$dir/.stamp") {
@@ -48,29 +50,136 @@ foreach my $dir (glob("*")) {
         system("touch", "$dir/.stamp");
         system("touch", "$dir/00-Initial-Entry.ok");
 	$newest_stamp = $newest = 0;
-    }	
-    
+    }
+
     foreach my $file (glob("$dir/*")) {
 	my $n = -M $file;
 	$newest = $n if ($newest > $n);
 	$newest_stamp = $n if ($newest_stamp > $n);
+
+	if ($file =~ m{/(\d+-\d+\.\d+)($|\.)}) {
+	    # Remember the date-time.rnd part
+	    my $dt = $1;
+	    if (defined $seen{$dt}) {
+		# Erk, two of them.  Remember the bigger one.
+		#
+		# Probably renamed by expire from .tmp.file to
+		# file.staletmp
+		$seen{$dt} = $file if -s $file > -s $seen{$dt};
+	    } else {
+		$seen{$dt} = $file;
+	    }
+	}
     }
-    
-    my $date = strftime("%Y%m%d-%H%M%S", localtime());
-    my $efile = "$dir/$date." . int(rand(100000)).'.warn';
-    
+
+    my @WARN;
+    foreach my $file (glob("$dir/.tmp.*")) {
+	my ($dt, $rnd) =
+	  $file =~ m{/\.tmp\.(\d+-\d+)\.(\d+)($|\.)};
+	next unless $dt;
+	my $begin = stamp2u($dt);
+
+	if (my $done_file = $seen{"$dt.$rnd"}) {
+	    # The rename of .tmp.file has been done elsewhere, but we
+	    # have both copies because we fetched the .tmp.file while
+	    # the job was running.
+	    if (-s $file > -s $done_file) {
+		# .tmp.file is longer, repeat the rename.  This is
+		# probably a .staletmp file.
+		if (rename($file, $done_file)) {
+		    push @WARN, "Repeated rename $file -> $done_file\n"
+		} else {
+		    push @WARN, "Cannot repeat rename $file -> $done_file: $!\n";
+		}
+		utime $^T, $^T, $done_file; # bump to the top of the RSS
+
+	    } else {
+		# Delete the .tmp.file because it's stale.
+		unlink($file) or push @WARN, "Cannot unlink($file): $!\n";
+
+		warn "Race file cleaned: $file\n";
+		# this makes expire noisy, which it previously was
+		# not; mine runs under 'add' and immediately after
+		# data-from so that may not matter..?
+	    }
+
+	} elsif ($^T - $begin > 0.3 * 86400) {
+	    # Guess what happened to its job?
+	    #
+	    # Input data: start time & last modification time.
+	    #
+	    # States: we are the host where it ran XOR we are likely to be given another copy later
+	    #
+	    # Causes:
+	    #   job started and crashing (machine crash or 'add' failure)
+	    #   job running for a long time
+	    #   job completed nicely but data-{to,from} has not happened
+	    #
+	    # Possible actions:
+	    #   rename it, so we have state for next time?
+	    #      Then the 'add' process will be confused if local; that will generate cron mail.
+	    #      Or we will repeatedly fetch the latest .tmp.file and unlink it; if the remote has an old 'expire'.
+	    #      We may also end up with two files DDD-TTT.RND{.staletmp,.ok}
+	    #   hardlink it, so we have both?  Then we must expire one link later, when process finishes.
+	    #   touch an adjacent file to acknowledge the length/mtime; tidy it up later.  (idempotently? need a warning each)
+	    #      If same host: ack+warn after 0.3d, else after 1.1d; avoids fetch/expire races
+
+	    # Do something to prevent warning recurring per expire run.
+	    # Try renaming, see how it works out...
+	    my $new_name = $file;
+	    $new_name =~ s{/\.tmp\.}{/};
+	    $new_name .= ".staletmp";
+	    my ($dev,$ino,$mode,$nlink,$uid,$gid,$rdev,$size,
+		$atime,$mtime,$ctime,$blksize,$blocks) = stat($file);
+	    rename $file, $new_name or push @WARN, "Renaming $file => $new_name: $!\n";
+	    utime $^T, $^T, $new_name; # bump to the top of the RSS
+
+	    # Generate a warning
+	    push @WARN, sprintf("Stale or long-running job?\n".
+				"  %s renamed to %s\n".
+				"  atime=%s mtime=%s ctime=%s (now touched)\n",
+				$file, $new_name,
+				map { u2stamp($_) } ($atime, $mtime, $ctime));
+
+	} # else it started recently - assume we have simply "not yet seen" the rename to a completion filename
+    }
+
     if ($newest_stamp > 0.3 || $newest > 1.1) {
-	open my $fh, ">$efile" or die("$efile: $!\n");
+	push @WARN, sprintf("No recent entries in this directory!\n".
+			    "  Latest stamp is %.2f days old.\n".
+			    "  Latest file is %.2f days old.\n",
+			    $newest_stamp, $newest);
+    }
+
+    if (@WARN) {
 	my $host = `hostname`;
 	$host =~ s/\s+//g;
-	print $fh "WARNING (host=$host): No recent entries in this directory!\n";
-	print $fh "\n";
-	printf $fh "Latest stamp is %.2f days old.\n", $newest_stamp;
-	printf $fh "Latest file is %.2f days old.\n", $newest;
+	my $s = (@WARN == 1 ? '' : 'S');
+	my $msg = join "\n", "WARNING$s (host=$host)\n", @WARN;
+
+	my $date = u2stamp($^T);
+	my $efile = "$dir/$date." . int(rand(100000)).'.warn';
+
+	open my $fh, ">$efile" or die("$efile: $!\n\nPending messages:\n$msg");
+	print $fh $msg;
     }
 }
 
 if ($ENV{'GATEWAY_INTERFACE'}) {
     # Called as CGI.  That's OK if we were POSTed.
     print "Content-type: text/plain\n\nExpiry ran OK.\n";
+}
+
+
+sub u2stamp {
+    my $utime = shift;
+    return strftime("%Y%m%d-%H%M%S", localtime($utime));
+}
+
+sub stamp2u {
+    my $dt = shift;
+    my ($Y,$M,$D, $h, $m, $s) =
+      $dt =~ m{^(\d{4})(\d{2})(\d{2})-(\d{2})(\d{2})(\d{2})$}
+	or die "Cannot parse datetime stamp '$dt'";
+    return timelocal($s,$m,$h, $D, $M-1, $Y-1900);
 }

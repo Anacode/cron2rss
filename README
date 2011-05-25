@@ -30,14 +30,18 @@ tracked with your favourite RSS reader such as Firefox.
 But cron already knows how to email you the results of your background
 processes, so what's the point?
 
-Well, the result of a cron job can be one of three basic things:
+Well, the result of a cron job can be one of:
 
    1) The cron job ran and succeeded.
    
    2) The cron job ran and failed.
    
    3) The cron job didn't run.
-   
+
+   4) The cron job started and is still running.  Come back later.
+
+   5) The cron job started, then cron or the whole machine crashed.
+
 Cron emails are not very good for #1, because if you have a job running
 every 10 minutes, you don't want the email.  Thus, almost everybody ensures
 that their cron jobs don't generate any output when they're successful, and
@@ -67,13 +71,15 @@ cron2rss deals with your cron monitoring problems in these ways:
       
    3) It detects the *lack* of new log output for an unusually long time,
       and reports *that* as an error.
-      
-   4) It makes it easy for you to monitor your logs from a host *other*
+
+   4) It detects tmpfiles made at the start of a job and not yet completed.
+
+   5) It makes it easy for you to monitor your logs from a host *other*
       than the ones running the jobs, so that if your job host goes down,
       the monitor host can still run.  Plus, a single RSS feed can monitor
       all your cron jobs.
       
-   5) It's easy to set up multiple cron2rss monitor servers, so you can
+   6) It's easy to set up multiple cron2rss monitor servers, so you can
       subscribe to the RSS feed from more than one machine in case cron2rss
       itself fails.
       

@@ -1,0 +1,65 @@
+#! /bin/sh
+
+# When expiring...
+#   For sources, do expire first because it may create new files.
+#   Then do data-from because it may bring us new files.
+#   Finally, run expire here.
+
+IHOME="$( cd $(dirname "$0"); echo $PWD )"
+if [ ! -e "$IHOME/data" ]; then
+	echo "Assertion failed: can't find self!" >&2
+	exit 1
+fi
+
+do_expire=
+if [ "$1" = "-e" ]; then
+    do_expire=1
+    shift
+fi
+
+if [ -z "$1" ]; then
+    echo "Usage: $0 [-e] <data-from>...
+
+  When -e is given:
+
+    Run expire for each <data-from> argument which is local and
+    belongs to us (by euid).  Note that this trusts the directory
+    permissions above each local <data-from>s to prevent other users
+    replacing the expire script.
+
+    Then run our data-from for each <data-from> argument.
+
+    Finally, run our expire.
+
+  Without -e, just run our data-from for each argument.
+
+  NOTE: Provide the base cron2rss folder, not the data/ folder."
+    exit 2
+fi >&2
+
+for C2R in $*; do
+    printf '\n==< %s\n' "$C2R"
+    if [ -n "$do_expire" ]; then
+	case $C2R in
+	    *::*) echo "(cannot expire by rsync)" ;;
+	    *:*) echo "(expire by ssh is not implemented)" ;;
+	    /*)
+		if [ -O "$C2R" ] && [ -O "$C2R/expire" ]; then
+		    echo expire...
+		    $C2R/expire
+		else
+		    echo "(cannot expire local - not ours)"
+		fi
+		;;
+	    *) echo "(cannot expire - strange?)" ;;
+	esac
+    fi
+    echo data-from...
+    $IHOME/data-from $C2R
+done
+
+printf '\n==> %s\n' "$IHOME"
+if [ -n "$do_expire" ]; then
+    echo expire...
+    $IHOME/expire
+fi
