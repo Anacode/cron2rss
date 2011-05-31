@@ -100,6 +100,7 @@ sub rss_item($$$$)
     my $date = strftime("%a, %d %b %Y %H:%M:%S %z", localtime($datecode));
     $description =~ s/\&/\&amp;/g;
     $description =~ s/</&lt;/g;
+    $description =~ s/([\x00-\x08\x0B-\x1F])/'^'.chr(ord($1) + 64)/eg;
     $description = shorten($description, 10240);
 
     die unless utf8::valid($description . $title . $date . $link);

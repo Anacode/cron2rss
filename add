@@ -34,7 +34,7 @@ my $section = shift @ARGV;
 die("No such section '$homedir/data/$section'\n")
   unless -d "$homedir/data/$section";
 
-my $date = strftime("%Y%m%d-%H%M%S", localtime()) . "." . int(rand(100000));
+my $date = stampnow() . "." . int(rand(100000));
 my $tmpfile = "$homedir/data/$section/.tmp.$date";
 my $realfile = "$homedir/data/$section/$date";
 
@@ -98,6 +98,15 @@ if (@ARGV) {
 }
 
 print_log("No messages.\n") unless $any;
+
+my $stale = 0;
+if (! -f $tmpfile && -f "$realfile.staletmp") {
+    # 'expire' renamed our file already
+    my $now = stampnow();
+    print_log("Finished at $now and found my tmpfile already renamed");
+    $stale = 1;
+}
+
 close $fh;
 
 my $ok;
@@ -109,11 +118,18 @@ if ($want_quiet) {
     # (same logic as cron uses)
     $ok = (!$any || $ret==0);
 }
-rename($tmpfile, $realfile.($ok ? '.ok' : ''))
-  or die "Rename $tmpfile: $!";
+if (!$stale) {
+    rename($tmpfile, $realfile.($ok ? '.ok' : ''))
+      or die "Rename $tmpfile: $!";
+}
 
 system("touch", "$homedir/data/$section/.stamp");
 
 # we exit with code zero even if the subprogram failed, because we
 # don't want cron to *also* try to log stuff.
 exit 0;
+
+
+sub stampnow {
+    return strftime("%Y%m%d-%H%M%S", localtime());
+}
