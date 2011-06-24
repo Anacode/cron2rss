@@ -39,7 +39,6 @@ USAGE
 my @section = ($ARGV[0] eq '-L'
 	       ? crontab2sections(@ARGV)
 	       : @ARGV);
-warn "stamp: @section\n";
 
 # update the .stamp in each data folder to show that we've visited it recently
 foreach my $dir (@section) {
