@@ -37,6 +37,11 @@ if [ -z "$1" ]; then
     exit 2
 fi >&2
 
+fail() {
+    echo "$*"
+    exit 4
+}
+
 for C2R in $*; do
     printf '\n==< %s\n' "$C2R"
     if [ -n "$do_expire" ]; then
@@ -46,20 +51,20 @@ for C2R in $*; do
 	    /*)
 		if [ -O "$C2R" ] && [ -O "$C2R/expire" ]; then
 		    echo expire...
-		    $C2R/expire
+		    $C2R/expire || fail "$C2R/expire: failed, code=$?"
 		else
 		    echo "(cannot expire local - not ours)"
 		fi
 		;;
-	    *) echo "(cannot expire - strange?)" ;;
+	    *) fail "(cannot expire - strange?)" ;;
 	esac
     fi
     echo data-from...
-    $IHOME/data-from $C2R
+    $IHOME/data-from $C2R || fail "data-from $C2R: failed, code=$?"
 done
 
 printf '\n==> %s\n' "$IHOME"
 if [ -n "$do_expire" ]; then
     echo expire...
-    $IHOME/expire
+    $IHOME/expire || fail "$IHOME/expire: failed, code=$?"
 fi

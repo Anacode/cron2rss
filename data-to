@@ -16,7 +16,12 @@ fi >&2
 echo "Syncing from $IHOME/. to $1..." >&2
 
 rsync -za "$IHOME/data/." "$1/data/." \
-	--exclude '*~'
+    --exclude '*~' \
+    || {
+    echo "rsync failed (code $?)" >&2
+    exit 1
+}
+
 
 echo "Done." >&2
 
