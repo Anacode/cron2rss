@@ -9,6 +9,14 @@ sub dirname($)
     return ".";
 }
 
+# Default -L pattern is for crontabs like
+#
+#   C2R=/var/tmp/foo.cron2rss
+#
+#   3 *  * * *              $C2R/add    admin do_stuff.sh
+#
+my $CRONTAB_RE = qr{^[^#]+\s\$C2R/add\s+(?:-\w+\s+)*(\S+)\s};
+
 my $homedir = dirname($0);
 chdir $homedir
     or die("Can't find home directory '$homedir'\n");
@@ -16,16 +24,44 @@ chdir $homedir
 chdir 'data'
     or die("No $homedir/data/ subdir!");
 
-if (!@ARGV) {
-    print STDERR "Usage: $0 <sections...>\n";
-    print STDERR "  Mark the given sections as having been touched recently.\n";
+if (!@ARGV || $ARGV[0] =~ /^-?-h/) {
+    print STDERR <<"USAGE";
+Usage: $0 <sections... >
+       $0 -L [pattern]\n
+  Mark the given sections as having been touched recently,
+  or run "crontab -l" and extract the sections using the first capture
+  group of the provided Perl regexp.  Pattern currently defaults to
+    $CRONTAB_RE\n
+USAGE
     exit 1;
 }
 
+my @section = ($ARGV[0] eq '-L'
+	       ? crontab2sections(@ARGV)
+	       : @ARGV);
+
 # update the .stamp in each data folder to show that we've visited it recently
-foreach my $dir (@ARGV) {
+foreach my $dir (@section) {
     die("$dir: no such directory!") unless -d $dir;
-    system("touch", "$dir/.stamp");
+    system("touch", "$dir/.stamp") && die "$dir: touch failed";
 }
 
 exit 0;
+
+# This allows a DRY crontab.  Perform some "add"s, a "stamp" and an
+# "expire".  No need to list all the adds a second time.
+sub crontab2sections {
+    my (undef, $pat, @junk) = @_;
+    $pat = $CRONTAB_RE if !defined $pat;
+
+    die "Require one pattern with a capture group"
+      if @junk || $pat !~ m{\(.*\)};
+
+    my @crontab = `crontab -l`;
+    my %section;
+    foreach my $ln (@crontab) {
+	$section{$1}=$ln if $ln =~ $pat;
+    }
+
+    return sort keys %section;
+}
