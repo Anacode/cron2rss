@@ -1,5 +1,11 @@
 #!/bin/bash
 
+TOFROM=from
+DESTSRC=src
+DST="$IHOME"
+SRC="$1"
+
+
 IHOME="$(dirname "$0")"
 if [ ! -e "$IHOME/data" ]; then
 	echo "Assertion failed: can't find self!" >&2
@@ -7,20 +13,21 @@ if [ ! -e "$IHOME/data" ]; then
 fi
 
 if [ -z "$1" ]; then
-	echo "Usage: $0 <rsync-src>"
-	echo "  Syncs new cron2rss data files from given cron2rss folder."
+	echo "Usage: $0 <rsync-$DESTSRC>"
+	echo "  Syncs new cron2rss data files $TOFROM given cron2rss folder."
 	echo "  NOTE: Provide the base cron2rss folder, not the data/ folder."
 	exit 2
 fi >&2
 
-echo "Syncing from $1 to $IHOME/. ..." >&2
+echo "Syncing from $SRC to $DST ..." >&2
 
-rsync -za "$1/data/." "$IHOME/data/." \
+rsync -za "$SRC/data/." "$DST/data/." \
     --exclude '*~' \
     || {
     echo "rsync failed (code $?)" >&2
     exit 1
 }
+
 
 echo "Done." >&2
 
