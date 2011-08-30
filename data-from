@@ -1,42 +1,9 @@
 #!/bin/bash
 
-TOFROM=from
-DESTSRC=src
-DST="$IHOME"
-SRC="$1"
-
-
 IHOME="$(dirname "$0")"
 if [ ! -e "$IHOME/data" ]; then
 	echo "Assertion failed: can't find self!" >&2
 	exit 1
 fi
 
-if [ -z "$1" ]; then
-	echo "Usage: $0 <rsync-$DESTSRC>"
-	echo "  Syncs new cron2rss data files $TOFROM given cron2rss folder."
-	echo "  NOTE: Provide the base cron2rss folder, not the data/ folder."
-	exit 2
-fi >&2
-
-echo "Syncing from $SRC to $DST ..." >&2
-
-
-do_rsync() {
-    rsync -za "$SRC/data/." "$DST/data/." --exclude '*~'
-    RET=$?
-    [ "$RET" != 0 ] && echo "rsync failed (code $RET)" >&2
-    return $RET
-}
-
-do_rsync
-if [ "$RET" = 24 ]; then # "Partial transfer due to vanished source files"
-    # This is a common case when the clocks are synced and we run at *:01
-    echo "Partial transfer - try one more time" >&2
-    do_rsync || exit $RET
-elif [ "$RET" != 0 ]; then
-    exit $RET
-fi
-
-echo "Done." >&2
-
+exec "$IHOME/data-xfer" --from "$1"
