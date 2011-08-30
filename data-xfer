@@ -1,0 +1,47 @@
+#!/bin/bash
+
+IHOME="$(dirname "$0")"
+if [ ! -e "$IHOME/data" ]; then
+	echo "Assertion failed: can't find self!" >&2
+	exit 1
+fi
+
+case $1 in
+     --from)
+        DST="$IHOME"
+        SRC="$2"
+        ;;
+    --to)
+        DST="$2"
+        SRC="$IHOME"
+        ;;
+esac
+
+if [ -z "$2" ] || [ -z "$DST" ]; then
+	echo "Usage: $0 < --from | --to > <rsync-dir>"
+	echo "  Syncs new cron2rss data files from/to given cron2rss folder."
+	echo "  NOTE: Provide the base cron2rss folder, not the data/ folder."
+	exit 2
+fi >&2
+
+echo "Syncing from $SRC to $DST ..." >&2
+
+
+do_rsync() {
+    rsync -za "$SRC/data/." "$DST/data/." --exclude '*~'
+    RET=$?
+    [ "$RET" != 0 ] && echo "rsync failed (code $RET)" >&2
+    return $RET
+}
+
+do_rsync
+if [ "$RET" = 24 ]; then # "Partial transfer due to vanished source files"
+    # This is a common case when the clocks are synced and we run at *:01
+    echo "Partial transfer - try one more time" >&2
+    do_rsync || exit $RET
+elif [ "$RET" != 0 ]; then
+    exit $RET
+fi
+
+echo "Done." >&2
+
