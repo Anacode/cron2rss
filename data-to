@@ -21,6 +21,7 @@ fi >&2
 
 echo "Syncing from $SRC to $DST ..." >&2
 
+# XXX: lacks "partial transfer" handling of data-from
 rsync -za "$SRC/data/." "$DST/data/." \
     --exclude '*~' \
     || {

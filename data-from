@@ -21,13 +21,22 @@ fi >&2
 
 echo "Syncing from $SRC to $DST ..." >&2
 
-rsync -za "$SRC/data/." "$DST/data/." \
-    --exclude '*~' \
-    || {
-    echo "rsync failed (code $?)" >&2
-    exit 1
+
+do_rsync() {
+    rsync -za "$SRC/data/." "$DST/data/." --exclude '*~'
+    RET=$?
+    [ "$RET" != 0 ] && echo "rsync failed (code $RET)" >&2
+    return $RET
 }
 
+do_rsync
+if [ "$RET" = 24 ]; then # "Partial transfer due to vanished source files"
+    # This is a common case when the clocks are synced and we run at *:01
+    echo "Partial transfer - try one more time" >&2
+    do_rsync || exit $RET
+elif [ "$RET" != 0 ]; then
+    exit $RET
+fi
 
 echo "Done." >&2
 
