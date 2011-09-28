@@ -2,6 +2,10 @@
 use strict;
 use POSIX qw(strftime);
 
+# We can no longer rely on crond to give us the umask we want.  Set it
+# explicitly (for this script, and to be inherited by the wrapped job)
+umask 022;
+
 sub dirname($)
 {
     my $filename = shift @_;
