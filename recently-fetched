@@ -1,0 +1,119 @@
+#! /usr/bin/perl
+
+use strict;
+use warnings;
+
+use Socket;
+use Getopt::Long;
+use Date::Parse;
+
+
+=head1 NAME
+
+recently-fetched - assert that certain machines are tracking RSS feeds
+
+=head1 SYNOPSIS
+
+ recently-fetched --host mydesktop,hislaptop --host anotherhost --since -864000 logs/access_log
+
+=head1 DESCRIPTION
+
+Another level of safety net to ensure the RSS feeds are being watched.
+
+This is cast in the form of a hasty web log parser which dies if
+requested hosts are not seen accessing the RSS feeds.
+
+=head1 Requirements
+
+An Apache combined access_log file.  Script will benefit from
+reporting of forwarded requests in this format,
+
+ LogFormat "%h %l %u %t \"%r\" %>s %b \"%{Referer}i\" \"%{User-Agent}i\" fwd:%{x-forwarded-for}i" proxycombined
+
+=cut
+
+
+sub main {
+    my %opt =
+      ( urlpat => '/cgi-bin/cron2rss/',
+      );
+    GetOptions(\%opt, 'host|H=s@', 'quiet|q!', 'dump!', 'since|t=s', 'urlpat|U=s') && ref($opt{host})
+      or die "Syntax: $0 [ --host <name>[,<name>]* ]+ [--dump] [ --since <timespec> ] <access_log>\n";
+
+    # Filter for fetches we are interested in
+    my $url_pattern = qr{ "GET $opt{urlpat}};
+
+    my $since = $opt{since};
+    if (!defined $since) {
+        # unlimited
+    } elsif ($since =~ /^-/) {
+        $since += time();
+    } elsif ($since =~ /^\d+$/) {
+        # already a unixtime
+    } else {
+        $since = str2time($opt{since}) or
+          die "Cannot parse timespec '$opt{since}'";
+    }
+
+    my %seen; # key = ip, value = latest \%{ parselog_output }
+    while (<>) {
+        next unless $_ =~ m{$url_pattern}o;
+
+        my $logh = parselog($_);
+        next unless !$since || $logh->{time} >= $since;
+        $seen{ $logh->{ip} } = $logh;
+    }
+
+    if ($opt{dump}) {
+        require YAML;
+        print YAML::Dump({ seen => \%seen, since => [ $since, scalar localtime($since) ] });
+    }
+
+    # Which hosts did we (not) see?
+    my @want_ip = map { name2ip($_) } map { split ',' } @{ $opt{host} };
+
+    my %want;
+    @want{@want_ip} = ();
+    delete @want{ keys %seen };
+    delete @seen{ @want_ip };
+
+    my @also = sort keys %seen;
+    warn "IPs also noticed: @also\n" if @also && !$opt{quiet};
+
+    my @missing = sort keys %want;
+    die "IPs expected but not seen: @missing\n" if @missing;
+
+    return 0;
+}
+
+sub parselog {
+    my ($ln) = @_;
+    chomp $ln;
+
+    my $host;
+    $host = $1 if $ln =~ m{ fwd:(\S+)$} && $1 ne '-';
+    $host ||= $1 if $ln =~ m{^(\S+) };
+
+    my $ip;
+    if ($host =~ m{^([0-9.:]+)$}) {
+        $ip = $host;
+    } else {
+        $ip = name2ip($host);
+    }
+
+    my ($tm) = $ln =~ m{ \[(\d{2}/\w{3}/\d{4}:\d{2}:\d{2}:\d{2} [-+]\d{4})\] };
+
+    return +{ line => $ln, ip => $ip, time => str2time($tm) };
+}
+
+my %dns_cache;
+sub name2ip { # returns the input name if it doesn't resolve
+    my ($host) = @_;
+    return $dns_cache{$host} ||= do {
+        my $packed_ip = gethostbyname($host);
+        defined $packed_ip ? inet_ntoa($packed_ip) : $host;
+    };
+}
+
+
+exit main();
