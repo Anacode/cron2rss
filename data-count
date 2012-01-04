@@ -1,0 +1,13 @@
+#! /bin/sh
+
+IHOME="$(dirname "$0")"
+if [ ! -d "$IHOME/data" ]; then
+	echo "Assertion failed: can't find self!" >&2
+	exit 1
+fi
+
+[ -n "$GATEWAY_INTERFACE" ] && printf 'Content-type: text/plain\n\n'
+
+for d in $IHOME/data/*; do
+    printf '%s\t%s\n' $( ls -1 $d | wc -l ) $d
+done | sort -rn
