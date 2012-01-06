@@ -3,10 +3,13 @@ use strict;
 use CGI qw/:standard/;
 use POSIX qw(strftime);
 
+use FindBin '$Bin';
+use lib "$Bin/lib";
+use App::Cron2RSS ':all';
+
 binmode STDOUT, ":utf8";
 
-die("No data/ subdir!") if not -d "data";
-chdir "data";
+chdir_to_data();
 
 
 sub mtime($)
@@ -27,13 +30,6 @@ sub catfile(@)
 	close $fh;
     }
     return join('', @list);
-}
-
-sub dirname($)
-{
-    my $filename = shift @_;
-    $filename =~ m{(.*)/([^/]+)}  &&  return $1;
-    return ".";
 }
 
 sub basename($)
@@ -78,6 +74,8 @@ print "\n";
 
 my $fail_only = defined(param('q')) && param('q') eq "failed";
 my $ptitle = $fail_only ? "Cron FAIL" : "Cron";
+my $files_per_dir = param('n') || 5;
+
 
 print qq{<?xml version="1.0" encoding="UTF-8"?>
 <rss version='2.0'
@@ -127,7 +125,7 @@ for my $_dir (glob("*"))
     @files = sort { mtime($b) <=> mtime($a) } @files;
 
     my $i = 0;
-    while ($i < 5 && @files) {
+    while ($i < $files_per_dir && @files) {
         my $file = shift @files;
         my $ok = -r $file && (-z $file || $file =~ /\.ok$/);
         next if $ok && $fail_only;

@@ -2,12 +2,10 @@
 use strict;
 use POSIX qw(strftime);
 
-sub dirname($)
-{
-    my $filename = shift @_;
-    $filename =~ m{(.*)/([^/]+)}  &&  return $1;
-    return ".";
-}
+use FindBin '$Bin';
+use lib "$Bin/lib";
+use App::Cron2RSS ':all';
+
 
 # Default -L pattern is for crontabs like
 #
@@ -17,12 +15,7 @@ sub dirname($)
 #
 my $CRONTAB_RE = qr{^[^#]+\s\$C2R/add\s+(?:-\w+\s+)*(\S+)\s};
 
-my $homedir = dirname($0);
-chdir $homedir
-    or die("Can't find home directory '$homedir'\n");
-
-chdir 'data'
-    or die("No $homedir/data/ subdir!");
+chdir_to_data();
 
 if (!@ARGV || $ARGV[0] =~ /^-?-h/) {
     print STDERR <<"USAGE";
@@ -32,6 +25,10 @@ Usage: $0 <sections... >
   or run "crontab -l" and extract the sections using the first capture
   group of the provided Perl regexp.  Pattern currently defaults to
     $CRONTAB_RE\n
+
+  Sections which do not have an existing directory will cause noisy
+  failure.
+  XXX: add option to be quiet (the impending job will do the noisy failing) or auto-create (it's necessary and probably an oversight)?
 USAGE
     exit 1;
 }
@@ -41,12 +38,20 @@ my @section = ($ARGV[0] eq '-L'
 	       : @ARGV);
 
 # update the .stamp in each data folder to show that we've visited it recently
+my $exit = 0;
 foreach my $dir (@section) {
-    die("$dir: no such directory!") unless -d $dir;
-    system("touch", "$dir/.stamp") && die "$dir: touch failed";
+    unless (-d $dir) {
+        warn("$dir: no such directory!");
+        $exit |= 4;
+        next;
+    }
+    if (system("touch", "$dir/.stamp")) {
+        warn "$dir: touch failed";
+        $exit |= 8;
+    }
 }
 
-exit 0;
+exit $exit;
 
 # This allows a DRY crontab.  Perform some "add"s, a "stamp" and an
 # "expire".  No need to list all the adds a second time.

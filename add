@@ -2,16 +2,14 @@
 use strict;
 use POSIX qw(strftime);
 
+use FindBin '$Bin';
+use lib "$Bin/lib";
+use App::Cron2RSS ':all';
+
 # We can no longer rely on crond to give us the umask we want.  Set it
 # explicitly (for this script, and to be inherited by the wrapped job)
 umask 022;
 
-sub dirname($)
-{
-    my $filename = shift @_;
-    $filename =~ m{(.*)/([^/]+)}  &&  return $1;
-    return ".";
-}
 
 sub neat_times() {
     my ($user,$system,$cuser,$csystem) = times;
@@ -20,7 +18,20 @@ sub neat_times() {
 		   $wall, $cuser+$csystem, $csystem);
 }
 
-my $want_quiet = (@ARGV && $ARGV[0] eq '-Q' && shift @ARGV);
+my $want_quiet = 0;
+my $pass_through = '';
+while (@ARGV && $ARGV[0] =~ /^-/) {
+    my $flag = shift @ARGV;
+    if ($flag eq '-Q') {
+        $want_quiet = 1;
+    } elsif ($flag eq '-p') {
+        $pass_through = 'onfail';
+    } elsif ($flag eq '-P') {
+        $pass_through = 'all';
+    } else {
+        die "Unknown option '$flag'";
+    }
+}
 
 if (@ARGV < 1) {
     print STDERR "Usage: $0 [-Q] <section> [commandline...]\n";
@@ -28,11 +39,7 @@ if (@ARGV < 1) {
     exit 1;
 }
 
-my $homedir = dirname($0);
-die("Can't find home directory '$homedir'\n") unless -d "$homedir/.";
-
-die("Can't find 'data' directory!") unless -d "$homedir/data/.";
-
+my $homedir = homedir();
 my $section = shift @ARGV;
 
 die("No such section '$homedir/data/$section'\n")
@@ -45,8 +52,12 @@ my $realfile = "$homedir/data/$section/$date";
 open my $fh, ">$tmpfile" or die("Create $tmpfile: $!\n");
 
 sub print_log($) {
-    print $fh @_
-      or die "Writing $tmpfile: $!";
+    my $err;
+    print $fh @_ or $err = "Writing $tmpfile: $!";
+    if ($pass_through eq 'all') {
+        print STDOUT @_ or $err ||= "Passthrough: $!";
+    }
+    die $err if $err;
 }
 
 my $host = `hostname`;
@@ -56,6 +67,7 @@ my $user = getpwuid($>);
 
 print_log("Starting: $date on host=$host user=$user\n");
 print_log("-Q: no news is good news\n") if $want_quiet;
+print_log("pass_through=$pass_through: will copy to mail\n") if $pass_through;
 if (@ARGV) {
     print_log("Command: " . join(' ', @ARGV) . "\n");
 }
@@ -109,6 +121,7 @@ if (! -f $tmpfile && -f "$realfile.staletmp") {
     my $now = stampnow();
     print_log("Finished at $now and found my tmpfile already renamed");
     $stale = 1;
+    $tmpfile = "$realfile.staletmp";
 }
 
 close $fh;
@@ -122,6 +135,9 @@ if ($want_quiet) {
     # (same logic as cron uses)
     $ok = (!$any || $ret==0);
 }
+
+pass_through_reprint($tmpfile) if $pass_through eq 'onfail' && !$ok;
+
 if (!$stale) {
     rename($tmpfile, $realfile.($ok ? '.ok' : ''))
       or die "Rename $tmpfile: $!";
@@ -136,4 +152,12 @@ exit 0;
 
 sub stampnow {
     return strftime("%Y%m%d-%H%M%S", localtime());
+}
+
+sub pass_through_reprint {
+    my ($fn) = @_;
+    open my $fh, '<', $fn or die "Re-reading $fn: $!";
+    while (<$fh>) {
+        print STDOUT or die "Re-read passthrough: $!";
+    }
 }
