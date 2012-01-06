@@ -12,7 +12,10 @@ Exporter::export_ok_tags('all');
 =cut
 
 sub local_setup {
-
+    # We can no longer rely on crond to give us the umask we want.
+    # Set it explicitly (for this script, and to be inherited by the
+    # wrapped job in "add")
+    umask 022;
 }
 
 sub general_setup {
