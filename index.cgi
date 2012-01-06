@@ -76,6 +76,8 @@ print "\n";
 
 my $fail_only = defined(param('q')) && param('q') eq "failed";
 my $ptitle = $fail_only ? "Cron FAIL" : "Cron";
+my $files_per_dir = param('n') || 5;
+
 
 print qq{<?xml version="1.0" encoding="UTF-8"?>
 <rss version='2.0'
@@ -125,7 +127,7 @@ for my $_dir (glob("*"))
     @files = sort { mtime($b) <=> mtime($a) } @files;
 
     my $i = 0;
-    while ($i < 5 && @files) {
+    while ($i < $files_per_dir && @files) {
         my $file = shift @files;
         my $ok = -r $file && (-z $file || $file =~ /\.ok$/);
         next if $ok && $fail_only;
