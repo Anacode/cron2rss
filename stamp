@@ -32,6 +32,10 @@ Usage: $0 <sections... >
   or run "crontab -l" and extract the sections using the first capture
   group of the provided Perl regexp.  Pattern currently defaults to
     $CRONTAB_RE\n
+
+  Sections which do not have an existing directory will cause noisy
+  failure.
+  XXX: add option to be quiet (the impending job will do the noisy failing) or auto-create (it's necessary and probably an oversight)?
 USAGE
     exit 1;
 }
