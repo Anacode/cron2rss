@@ -2,12 +2,10 @@
 use strict;
 use POSIX qw(strftime);
 
-sub dirname($)
-{
-    my $filename = shift @_;
-    $filename =~ m{(.*)/([^/]+)}  &&  return $1;
-    return ".";
-}
+use FindBin '$Bin';
+use lib "$Bin/lib";
+use App::Cron2RSS ':all';
+
 
 # Default -L pattern is for crontabs like
 #
@@ -17,12 +15,7 @@ sub dirname($)
 #
 my $CRONTAB_RE = qr{^[^#]+\s\$C2R/add\s+(?:-\w+\s+)*(\S+)\s};
 
-my $homedir = dirname($0);
-chdir $homedir
-    or die("Can't find home directory '$homedir'\n");
-
-chdir 'data'
-    or die("No $homedir/data/ subdir!");
+chdir_to_data();
 
 if (!@ARGV || $ARGV[0] =~ /^-?-h/) {
     print STDERR <<"USAGE";

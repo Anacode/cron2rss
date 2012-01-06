@@ -2,12 +2,10 @@
 use strict;
 use POSIX qw(strftime);
 
-sub dirname($)
-{
-    my $filename = shift @_;
-    $filename =~ m{(.*)/([^/]+)}  &&  return $1;
-    return ".";
-}
+use FindBin '$Bin';
+use lib "$Bin/lib";
+use App::Cron2RSS ':all';
+
 
 sub neat_times() {
     my ($user,$system,$cuser,$csystem) = times;
@@ -37,11 +35,7 @@ if (@ARGV < 1) {
     exit 1;
 }
 
-my $homedir = dirname($0);
-die("Can't find home directory '$homedir'\n") unless -d "$homedir/.";
-
-die("Can't find 'data' directory!") unless -d "$homedir/data/.";
-
+my $homedir = homedir();
 my $section = shift @ARGV;
 
 die("No such section '$homedir/data/$section'\n")

@@ -3,10 +3,13 @@ use strict;
 use CGI qw/:standard/;
 use POSIX qw(strftime);
 
+use FindBin '$Bin';
+use lib "$Bin/lib";
+use App::Cron2RSS ':all';
+
 binmode STDOUT, ":utf8";
 
-die("No data/ subdir!") if not -d "data";
-chdir "data";
+chdir_to_data();
 
 
 sub mtime($)
@@ -27,13 +30,6 @@ sub catfile(@)
 	close $fh;
     }
     return join('', @list);
-}
-
-sub dirname($)
-{
-    my $filename = shift @_;
-    $filename =~ m{(.*)/([^/]+)}  &&  return $1;
-    return ".";
 }
 
 sub basename($)
