@@ -30,8 +30,25 @@ while (@ARGV && $ARGV[0] =~ /^-/) {
 }
 
 if (@ARGV < 1) {
-    print STDERR "Usage: $0 [-Q] <section> [commandline...]\n";
-    print STDERR "  Copies stdin or command output to a new logfile in <section>.\n";
+    print STDERR <<"INFO";
+Usage: $0 [-Q] [ -p | -P ] <section> [commandline...]\n
+  Copies stdin or command output to a new logfile in <section>.
+
+      Vixie/Debian cron defines success as "no output from the job".
+
+      Our default definition of success is zero exit code OR no
+      output.
+
+  -Q    Success requires zero exit code AND no output from job.
+        This choice of flag letter arose from a collection of bugs.
+
+
+      Pass-through options cause cron to emit email in the usual way,
+
+  -p    Write output to stdout iff the job fails.
+  -P    Write output to stdout - always generate mail.
+
+INFO
     exit 1;
 }
 
@@ -122,13 +139,15 @@ if (! -f $tmpfile && -f "$realfile.staletmp") {
 
 close $fh;
 
+# Without cron2rss, cron (Vixie/Debian flavour) sends mail when
+# ($any), i.e. "silence is golden".  This ignores the exit code.
+# We don't re-implement that.
 my $ok;
 if ($want_quiet) {
-    # "silence is golden" semantic
+    # Require no output AND zero exit for success.
     $ok = (!$any && $ret == 0);
 } else {
-    # Assume zero-length output means success, else failure.
-    # (same logic as cron uses)
+    # Zero-length output OR zero exit means success, else failure.
     $ok = (!$any || $ret==0);
 }
 
@@ -142,7 +161,8 @@ if (!$stale) {
 system("touch", "$homedir/data/$section/.stamp");
 
 # we exit with code zero even if the subprogram failed, because we
-# don't want cron to *also* try to log stuff.
+# don't want cron to *also* try to log stuff.  (Vixie/Debian cron
+# ignores this, but wrappers may use the value.)
 exit 0;
 
 
